@@ -1,0 +1,11 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<ExtensionModel>
+    <Runtime>
+    </Runtime>
+    <Extension
+        path="/MonoDevelop/Ide/TextEditorExtensions">
+        <Class
+            mimeTypes="text/x-csharp"
+            class    ="YamlSense.VSMac.Completion.YamlEditorCompletionExtension" />
+    </Extension>
+</ExtensionModel>
