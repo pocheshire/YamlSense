@@ -5,7 +5,10 @@
     <Extension
         path="/MonoDevelop/Ide/TextEditorExtensions">
         <Class
-            mimeTypes="text/x-csharp"
-            class    ="YamlSense.VSMac.Completion.YamlEditorCompletionExtension" />
+            fileExtensions=".cs"
+            class         ="YamlSense.VSMac.Completion.YamlEditorCompletionExtension" />
+        <Class
+            fileExtensions=".yaml"
+            class         ="YamlSense.VSMac.Completion.YamlEditorChangerExtension" />
     </Extension>
 </ExtensionModel>

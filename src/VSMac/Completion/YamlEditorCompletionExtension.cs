@@ -1,128 +1,74 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.Linq;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
-using MonoDevelop.Core;
-using MonoDevelop.Ide;
 using MonoDevelop.Ide.CodeCompletion;
 using MonoDevelop.Ide.Editor;
 using MonoDevelop.Ide.Editor.Extension;
+using YamlSense.VSMac.Completion.Extensions;
+using YamlSense.VSMac.Completion.Suggest;
 
 namespace YamlSense.VSMac.Completion
 {
     public class YamlEditorCompletionExtension : CompletionTextEditorExtension
     {
-        private readonly List<FilePath> _yamlFiles = new List<FilePath>();
+        private readonly SuggestProvider _suggestProvider = new SuggestProvider();
 
-        #region Init
-
-        protected override void Initialize() // 2 
-        {
-            var projects = IdeApp.ProjectOperations.CurrentSelectedSolution.Items;
-
-            foreach (var project in projects)
-            {
-                var files = project.GetItemFiles(true);
-                var projectYamls =
-                    from file in files
-                    where file.Extension == ".yaml"
-                    select file.FullPath;
-
-                _yamlFiles.AddRange(projectYamls);
-            }
-
-            base.Initialize();
-        }
-
-        #endregion
-
-        #region Code completion
-
-        public override bool IsValidInContext(DocumentContext context) // 1
-        {
-            return true; // base.IsValidInContext(context);
-        }
-
-        public override bool KeyPress(KeyDescriptor descriptor) // 9
+        public override bool KeyPress(KeyDescriptor descriptor)
         {
             var result = base.KeyPress(descriptor);
-            System.Diagnostics.Debug.WriteLine($"KeyPress {result}");
+
+            System.Diagnostics.Debug.WriteLine($"YamlEditorCompletionExtension -> KeyPress -> keyChar: {descriptor.KeyChar}");
+            System.Diagnostics.Debug.WriteLine($"YamlEditorCompletionExtension -> KeyPress -> result: {result}");
+
+            if (descriptor.SpecialKey == SpecialKey.None)
+            {
+                if (descriptor.KeyChar.IsCharValid() && IsEditingInString() && CompletionWindowManager.IsVisible)
+                {
+                    CompletionWindowManager.HideWindow();
+                    RunCompletionCommand();
+                }
+            }
+
             return result;
         }
 
-        protected override void OnCompletionContextChanged(object o, EventArgs a) // 6
-        {
-            base.OnCompletionContextChanged(o, a);
-        }
-
-        protected override bool IsActiveExtension() // 7
-        {
-            return _yamlFiles?.Any() ?? false;
-        }
-
-        public override bool CanRunCompletionCommand()
-        {
-            return true;// base.CanRunCompletionCommand();
-        }
-
+        //documentation: https://github.com/mono/monodevelop/blob/12f655f5320ae9407ad78e610df9085d5b0fc0e5/main/src/addins/CSharpBinding/MonoDevelop.CSharp.Completion/CSharpCompletionTextEditorExtension.cs
         public override Task<ICompletionDataList> HandleCodeCompletionAsync(CodeCompletionContext completionContext, CompletionTriggerInfo triggerInfo, CancellationToken token = default(CancellationToken))
         {
-            var result = new CompletionDataList(new List<CompletionData>()
+            return Task.Run(() =>
             {
-                new CompletionData("Display text 1", IconId.Null, "Description 1", "Completion text 1"),
-                new CompletionData("Display text 2", IconId.Null, "Description 2", "Completion text 2"),
-                new CompletionData("Display text 3", IconId.Null, "Description 3", "Completion text 3"),
-                new CompletionData("Display text 4", IconId.Null, "Description 4", "Completion text 4")
+                System.Diagnostics.Debug.WriteLine($"YamlEditorCompletionExtension -> HandleCodeCompletionAsync");
+
+                try
+                {
+                    if (!IsEditingInString())
+                        return null;
+
+                    return _suggestProvider.Complete(completionContext, triggerInfo);
+                }
+                catch (Exception)
+                {
+                    var sb = new StringBuilder()
+                        .AppendLine($"Unexpected code completion exception.")
+                        .AppendLine($"FileName: {DocumentContext.Name}")
+                        .AppendLine($"Position: line={completionContext.TriggerLine} col={completionContext.TriggerLineOffset}")
+                        .AppendLine($"Line text: {Editor.GetLineText(completionContext.TriggerLine)}");
+
+                    System.Diagnostics.Debug.WriteLine(sb.ToString());
+
+                    return null;
+                }
             });
-
-            result.AddKeyHandler(new SuggestionKeyHandler());
-            result.AutoCompleteUniqueMatch = false;
-            result.AutoCompleteEmptyMatch = false;
-            result.AutoSelect = true;
-
-            return Task.FromResult<ICompletionDataList>(result);
         }
 
-        class SuggestionKeyHandler : ICompletionKeyHandler
+        private bool IsEditingInString()
         {
-            public bool PostProcessKey(CompletionListWindow listWindow, KeyDescriptor descriptor, out KeyActions keyAction)
-            {
-                var key = descriptor.SpecialKey;
-                var keyChar = descriptor.KeyChar;
+            var line = Editor.GetLine(Editor.CaretLine);
+            var lineText = Editor.GetTextAt(line.Offset, Editor.CaretColumn - 1);
 
-                if (key == SpecialKey.Return)
-                    keyAction = KeyActions.Complete;
-                else if (key == SpecialKey.BackSpace)
-                {
-                    keyAction = KeyActions.None;
-                    return false;
-                }
-                else if (keyChar != '\0')
-                {
-                    //keyAction = KeyActions.CloseWindow;
-                    keyAction = KeyActions.Process;
-                }
-                else
-                    keyAction = KeyActions.None;
-
-                listWindow.PostProcessKeyEvent(descriptor);
-
-                return true;
-            }
-
-            public bool PreProcessKey(CompletionListWindow listWindow, KeyDescriptor descriptor, out KeyActions keyAction)
-            {
-                keyAction = KeyActions.None;
-                return false;
-            }
+            return lineText.Count(x => x == '"') == 1;
         }
-
-        protected override void HandlePositionChanged(object sender, EventArgs e) // 8
-        {
-            base.HandlePositionChanged(sender, e);
-        }
-
-        #endregion
     }
 }
