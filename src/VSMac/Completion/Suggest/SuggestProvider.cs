@@ -28,7 +28,7 @@ namespace YamlSense.VSMac.Completion.Suggest
                 case CompletionTriggerReason.CompletionCommand:
                     result = new CompletionDataList(filteredCompletionDataList)
                     {
-                        TriggerWordLength = 0,
+                        TriggerWordLength = completionContext.TriggerWordLength,
                         AutoCompleteUniqueMatch = true,
                         DefaultCompletionString = string.Empty,
                         AutoSelect = false

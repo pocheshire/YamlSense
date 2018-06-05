@@ -17,24 +17,31 @@ namespace YamlSense.VSMac.Completion
 
         public override bool KeyPress(KeyDescriptor descriptor)
         {
+            System.Diagnostics.Debug.WriteLine($"YamlEditorCompletionExtension -> KeyPress -> keyChar: {descriptor.KeyChar}{Environment.NewLine}");
+
+            var isShowingNeeded = false;
+                
+            if (descriptor.SpecialKey == SpecialKey.None)
+                isShowingNeeded = descriptor.KeyChar.IsCharValid() && 
+                                  IsEditingInString(descriptor.KeyChar) && 
+                                  !CompletionWindowManager.IsVisible;
+
             var result = base.KeyPress(descriptor);
 
-            System.Diagnostics.Debug.WriteLine($"YamlEditorCompletionExtension -> KeyPress -> keyChar: {descriptor.KeyChar}");
-            System.Diagnostics.Debug.WriteLine($"YamlEditorCompletionExtension -> KeyPress -> result: {result}");
-
-            if (descriptor.SpecialKey == SpecialKey.None)
+            if (isShowingNeeded)
             {
-                if (descriptor.KeyChar.IsCharValid() && IsEditingInString() && CompletionWindowManager.IsVisible)
-                {
-                    CompletionWindowManager.HideWindow();
-                    RunCompletionCommand();
-                }
+                var completionWidget = DocumentContext.GetContent<ICompletionWidget>();
+                ShowCompletion(
+                    _suggestProvider.Complete(CurrentCompletionContext ?? completionWidget.CreateCodeCompletionContext(Editor.CaretOffset), new CompletionTriggerInfo(CompletionTriggerReason.CharTyped, descriptor.KeyChar))
+                );
+
+                System.Diagnostics.Debug.WriteLine($"YamlEditorCompletionExtension -> KeyPress -> ShowCompletion");
             }
 
             return result;
         }
 
-        //documentation: https://github.com/mono/monodevelop/blob/12f655f5320ae9407ad78e610df9085d5b0fc0e5/main/src/addins/CSharpBinding/MonoDevelop.CSharp.Completion/CSharpCompletionTextEditorExtension.cs
+        //documentation: https://github.com/mono/monodevelop/blob/master/main/src/addins/CSharpBinding/MonoDevelop.CSharp.Completion/CSharpCompletionTextEditorExtension.cs
         public override Task<ICompletionDataList> HandleCodeCompletionAsync(CodeCompletionContext completionContext, CompletionTriggerInfo triggerInfo, CancellationToken token = default(CancellationToken))
         {
             return Task.Run(() =>
@@ -43,9 +50,9 @@ namespace YamlSense.VSMac.Completion
 
                 try
                 {
-                    if (!IsEditingInString())
+                    if (!IsEditingInString('\0'))
                         return null;
-
+                    
                     return _suggestProvider.Complete(completionContext, triggerInfo);
                 }
                 catch (Exception)
@@ -63,12 +70,11 @@ namespace YamlSense.VSMac.Completion
             });
         }
 
-        private bool IsEditingInString()
+        private bool IsEditingInString(char keyChar)
         {
-            var line = Editor.GetLine(Editor.CaretLine);
-            var lineText = Editor.GetTextAt(line.Offset, Editor.CaretColumn - 1);
+            var lineText = Editor.GetLineText(Editor.CaretLine).Substring(0, Editor.CaretColumn - 1);
 
-            return lineText.Count(x => x == '"') == 1;
+            return lineText.Count(x => x == '"') == 1 || keyChar == '"';
         }
     }
 }

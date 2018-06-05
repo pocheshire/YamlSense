@@ -30,7 +30,7 @@ using Mono.Addins.Description;
 [assembly: Addin(
     "YamlSense.VSMac",
     Namespace = "YamlSense.VSMac",
-    Version = "1.0"
+    Version = "1.0.1"
 )]
 
 [assembly: AddinName("YamlSense.VSMac")]
