@@ -20,12 +20,12 @@ namespace YamlSense.VSMac.Completion
             System.Diagnostics.Debug.WriteLine($"YamlEditorCompletionExtension -> KeyPress -> keyChar: {descriptor.KeyChar}{Environment.NewLine}");
 
             var isShowingNeeded = false;
-                
-            if (descriptor.SpecialKey == SpecialKey.None)
-                isShowingNeeded = descriptor.KeyChar.IsCharValid() && 
-                                  IsEditingInString(descriptor.KeyChar) && 
-                                  !CompletionWindowManager.IsVisible;
 
+            if (descriptor.SpecialKey == SpecialKey.None)
+                isShowingNeeded = descriptor.KeyChar.IsCharValid() &&
+                                  IsEditingInString(descriptor.KeyChar) &&
+                                  !CompletionWindowManager.IsVisible;
+            
             var result = base.KeyPress(descriptor);
 
             if (isShowingNeeded)
@@ -42,6 +42,7 @@ namespace YamlSense.VSMac.Completion
         }
 
         //documentation: https://github.com/mono/monodevelop/blob/master/main/src/addins/CSharpBinding/MonoDevelop.CSharp.Completion/CSharpCompletionTextEditorExtension.cs
+        //sources: https://github.com/mono/monodevelop/blob/master/main/src/core/MonoDevelop.Ide/MonoDevelop.Ide.Editor.Extension/CompletionTextEditorExtension.cs
         public override Task<ICompletionDataList> HandleCodeCompletionAsync(CodeCompletionContext completionContext, CompletionTriggerInfo triggerInfo, CancellationToken token = default(CancellationToken))
         {
             return Task.Run(() =>
@@ -72,7 +73,8 @@ namespace YamlSense.VSMac.Completion
 
         private bool IsEditingInString(char keyChar)
         {
-            var lineText = Editor.GetLineText(Editor.CaretLine).Substring(0, Editor.CaretColumn - 1);
+            var currentLine = Editor.GetLineText(Editor.CaretLine);
+            var lineText = currentLine.Length >= Editor.CaretColumn ? currentLine.Substring(0, Editor.CaretColumn - 1) : string.Empty;
 
             return lineText.Count(x => x == '"') == 1 || keyChar == '"';
         }
