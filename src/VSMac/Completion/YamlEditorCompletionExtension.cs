@@ -41,8 +41,9 @@ namespace YamlSense.VSMac.Completion
             return result;
         }
 
-        //documentation: https://github.com/mono/monodevelop/blob/master/main/src/addins/CSharpBinding/MonoDevelop.CSharp.Completion/CSharpCompletionTextEditorExtension.cs
-        //sources: https://github.com/mono/monodevelop/blob/master/main/src/core/MonoDevelop.Ide/MonoDevelop.Ide.Editor.Extension/CompletionTextEditorExtension.cs
+        // documentation: https://github.com/mono/monodevelop/blob/master/main/src/addins/CSharpBinding/MonoDevelop.CSharp.Completion/CSharpCompletionTextEditorExtension.cs
+        // sources: https://github.com/mono/monodevelop/blob/master/main/src/core/MonoDevelop.Ide/MonoDevelop.Ide.Editor.Extension/CompletionTextEditorExtension.cs
+        // sources: https://github.com/mono/monodevelop/blob/master/main/src/core/MonoDevelop.Ide/MonoDevelop.Ide.Editor.Extension/TextEditorExtension.cs
         public override Task<ICompletionDataList> HandleCodeCompletionAsync(CodeCompletionContext completionContext, CompletionTriggerInfo triggerInfo, CancellationToken token = default(CancellationToken))
         {
             return Task.Run(() =>
@@ -69,6 +70,11 @@ namespace YamlSense.VSMac.Completion
                     return null;
                 }
             });
+        }
+
+        protected override bool IsActiveExtension()
+        {
+            return IsEditingInString(Editor.GetCharAt(Editor.CaretOffset));
         }
 
         private bool IsEditingInString(char keyChar)
