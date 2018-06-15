@@ -1,14 +1,18 @@
-﻿using System;
-using System.Linq;
-using System.Text;
+﻿using System.Linq;
 using System.Threading;
-using System.Threading.Tasks;
 using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
 using MonoDevelop.Ide.CodeCompletion;
 using MonoDevelop.Ide.Editor;
 using MonoDevelop.Ide.Editor.Extension;
 using YamlSense.VSMac.Completion.Extensions;
 using YamlSense.VSMac.Completion.Suggest;
+
+// documentation: https://github.com/mono/monodevelop/blob/master/main/src/addins/CSharpBinding/MonoDevelop.CSharp.Completion/CSharpCompletionTextEditorExtension.cs
+// sources: https://github.com/mono/monodevelop/blob/master/main/src/core/MonoDevelop.Ide/MonoDevelop.Ide.Editor.Extension/CompletionTextEditorExtension.cs
+// sources: https://github.com/mono/monodevelop/blob/master/main/src/core/MonoDevelop.Ide/MonoDevelop.Ide.Editor.Extension/TextEditorExtension.cs
+// sources: https://github.com/dotnet/roslyn/blob/master/src/Workspaces/CSharp/Portable/Extensions/ContextQuery/CSharpSyntaxContext.cs
+// sources: https://github.com/dotnet/roslyn/blob/878ffad23b8b06cb229c9ab31eada7634a473508/src/Workspaces/Core/Portable/Shared/Extensions/SyntaxNodeExtensions.cs#L638
 
 namespace YamlSense.VSMac.Completion
 {
@@ -16,12 +20,26 @@ namespace YamlSense.VSMac.Completion
     {
         private readonly SuggestProvider _suggestProvider = new SuggestProvider();
 
+        private SemanticModel _semanticModel;
+
+        protected override async void Initialize()
+        {
+            base.Initialize();
+
+            var analysisDocument = DocumentContext.AnalysisDocument;
+            if (analysisDocument != null)
+                _semanticModel = await analysisDocument.GetSemanticModelAsync(default(CancellationToken));
+        }
+
         public override bool KeyPress(KeyDescriptor descriptor)
         {
             var result = base.KeyPress(descriptor);
+
             if (descriptor.KeyChar == '"')
             {
-                if (Editor.CaretOffset > 2 && (Editor.GetCharAt(Editor.CaretOffset - 2) == '=' || Editor.GetCharAt(Editor.CaretOffset - 1) == '"' || Editor.GetCharAt(Editor.CaretOffset - 1) == '('))
+                if (Editor.CaretOffset > 2 && 
+                    (Editor.GetCharAt(Editor.CaretOffset - 1) == '"' || Editor.GetCharAt(Editor.CaretOffset) == '"') && 
+                    ((Editor.GetCharAt(Editor.CaretOffset - 2) == '=' || Editor.GetCharAt(Editor.CaretOffset - 3) == '=') || (Editor.GetCharAt(Editor.CaretOffset - 2) == '(' || Editor.GetCharAt(Editor.CaretOffset - 1) == '(')))
                 {
                     var completionWidget = DocumentContext.GetContent<ICompletionWidget>();
                     ShowCompletion(
@@ -31,45 +49,17 @@ namespace YamlSense.VSMac.Completion
                     System.Diagnostics.Debug.WriteLine($"YamlEditorCompletionExtension -> KeyPress -> ShowCompletion");
                 }
             }
-            return result;
-        }
-
-        // documentation: https://github.com/mono/monodevelop/blob/master/main/src/addins/CSharpBinding/MonoDevelop.CSharp.Completion/CSharpCompletionTextEditorExtension.cs
-        // sources: https://github.com/mono/monodevelop/blob/master/main/src/core/MonoDevelop.Ide/MonoDevelop.Ide.Editor.Extension/CompletionTextEditorExtension.cs
-        // sources: https://github.com/mono/monodevelop/blob/master/main/src/core/MonoDevelop.Ide/MonoDevelop.Ide.Editor.Extension/TextEditorExtension.cs
-        // sources: https://github.com/dotnet/roslyn/blob/master/src/Workspaces/CSharp/Portable/Extensions/ContextQuery/CSharpSyntaxContext.cs
-        // sources: https://github.com/dotnet/roslyn/blob/878ffad23b8b06cb229c9ab31eada7634a473508/src/Workspaces/Core/Portable/Shared/Extensions/SyntaxNodeExtensions.cs#L638
-        public override Task<ICompletionDataList> HandleCodeCompletionAsync(CodeCompletionContext completionContext, CompletionTriggerInfo triggerInfo, CancellationToken token = default(CancellationToken))
-        {
-            return Task.Run(() =>
+            else if (descriptor.SpecialKey == SpecialKey.None && HandleStringContext())
             {
-                System.Diagnostics.Debug.WriteLine($"YamlEditorCompletionExtension -> HandleCodeCompletionAsync");
+                var completionWidget = DocumentContext.GetContent<ICompletionWidget>();
+                ShowCompletion(
+                    _suggestProvider.Complete(CurrentCompletionContext ?? completionWidget.CreateCodeCompletionContext(Editor.CaretOffset), new CompletionTriggerInfo(CompletionTriggerReason.CharTyped, descriptor.KeyChar))
+                );
 
-                try
-                {
-                    if (!IsEditingInString('\0'))
-                        return null;
+                System.Diagnostics.Debug.WriteLine($"YamlEditorCompletionExtension -> KeyPress -> ShowCompletion");
+            }
 
-                    return _suggestProvider.Complete(completionContext, triggerInfo);
-                }
-                catch (Exception)
-                {
-                    var sb = new StringBuilder()
-                        .AppendLine($"Unexpected code completion exception.")
-                        .AppendLine($"FileName: {DocumentContext.Name}")
-                        .AppendLine($"Position: line={completionContext.TriggerLine} col={completionContext.TriggerLineOffset}")
-                        .AppendLine($"Line text: {Editor.GetLineText(completionContext.TriggerLine)}");
-
-                    System.Diagnostics.Debug.WriteLine(sb.ToString());
-
-                    return null;
-                }
-            });
-        }
-
-        protected override bool IsActiveExtension()
-        {
-            return IsEditingInString(Editor.GetCharAt(Editor.CaretOffset));
+            return result;
         }
 
         private bool IsEditingInString(char keyChar)
@@ -82,17 +72,33 @@ namespace YamlSense.VSMac.Completion
             return lineText.Count(x => x == '"') == 1 || keyChar == '"';
         }
 
-        private async void HandleStringContext()
+        private bool HandleStringContext()
         {
+            var handled = false;
+            
             var analysisDocument = DocumentContext.AnalysisDocument;
-            if (analysisDocument != null)
+            if (analysisDocument != null && analysisDocument.TryGetSemanticModel(out _semanticModel))
             {
-                var semanticModel = await analysisDocument.GetSemanticModelAsync(default(CancellationToken));
+                var syntaxTree = _semanticModel.SyntaxTree;
 
-                var syntaxTree = semanticModel.SyntaxTree;
+                var root = syntaxTree.GetRoot();
 
-                var preProcessorTokenOnLeftOfPosition = syntaxTree.GetRoot().FindTokenOnLeftOfPosition(Editor.CaretOffset, includeDirectives: true);
+                var preProcessorTokenOnLeftOfPosition = root.FindTokenOnLeftOfPosition(Editor.CaretOffset, includeDirectives: true);
+
+                handled = IsStringToken(preProcessorTokenOnLeftOfPosition);
             }
+
+            return handled;
+        }
+
+        private static bool IsStringToken(SyntaxToken token)
+        {
+            return token.IsKind(SyntaxKind.StringLiteralToken)
+                || token.IsKind(SyntaxKind.CharacterLiteralToken)
+                || token.IsKind(SyntaxKind.InterpolatedStringStartToken)
+                || token.IsKind(SyntaxKind.InterpolatedVerbatimStringStartToken)
+                || token.IsKind(SyntaxKind.InterpolatedStringTextToken)
+                || token.IsKind(SyntaxKind.InterpolatedStringEndToken);
         }
     }
 }
